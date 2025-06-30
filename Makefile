@@ -3,7 +3,7 @@ wasm:
 	@cd test-invalid && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.invalid.wasm module.go
 
 test:
-	@go test .
+	@go test . -v -cover
 
 bench:
 	@go test -bench=. -v -run=Benchmark.*
