@@ -23,10 +23,7 @@ jobs:
         tinygo-version: 0.38.0
 
     - name: Build WASM
-      run: cd test && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.wasm module.go
-
-    - name: Build WASM (invalid)
-      run: cd test-invalid && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.invalid.wasm module.go
+      run: make wasm
 
     - name: Cover
       run: go test . -coverprofile coverage.out

@@ -1,7 +1,5 @@
 wasm:
 	@cd test && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.wasm module.go
-
-wasm-invalid:
 	@cd test-invalid && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.invalid.wasm module.go
 
 test:
