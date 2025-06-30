@@ -62,10 +62,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 	m.ctx = ctx
 	m.pool = &sync.Pool{
 		New: func() any {
-			mod, err := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
-			if err != nil {
-				panic(err)
-			}
+			mod, _ := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
 			return mod
 		},
 	}

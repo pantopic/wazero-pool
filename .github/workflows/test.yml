@@ -1,0 +1,32 @@
+name: test
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: stable
+
+    - name: Set up Tinygo
+      uses: acifani/setup-tinygo@v2
+      with:
+        tinygo-version: 0.38.0
+
+    - name: Build WASM
+      run: cd test && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.wasm module.go
+
+    - name: Build WASM (invalid)
+      run: cd test-invalid && tinygo build -buildmode=wasi-legacy -target=wasi -opt=2 -gc=conservative -scheduler=none -o ../test.invalid.wasm module.go
+
+    - name: Test
+      run: go test . -v -cover

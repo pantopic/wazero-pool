@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -14,6 +15,9 @@ import (
 //go:embed test\.wasm
 var src []byte
 
+//go:embed test\.invalid\.wasm
+var srcInvalid []byte
+
 func TestModule(t *testing.T) {
 	ctx := context.Background()
 	runtime := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
@@ -21,15 +25,75 @@ func TestModule(t *testing.T) {
 		WithMemoryCapacityFromMax(true))
 	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 	cfg := wazero.NewModuleConfig()
-	pool, err := New(ctx, runtime, src, cfg)
-	if err != nil {
-		t.Fatalf(`%v`, err)
-	}
-	mod := pool.Get()
-	stack, err := mod.ExportedFunction("add").Call(ctx, 1, 1)
-	if len(stack) < 1 || stack[0] != 2 {
-		t.Fatalf(`Incorrect response: %v`, stack)
-	}
+	t.Run(`base`, func(t *testing.T) {
+		pool, err := New(ctx, runtime, src, cfg)
+		if err != nil {
+			t.Fatalf(`%v`, err)
+		}
+		for range 2 {
+			mod := pool.Get()
+			defer pool.Put(mod)
+			stack, err := mod.ExportedFunction("add").Call(ctx, 1, 1)
+			if err != nil {
+				t.Fatalf(`%v`, err)
+			}
+			if len(stack) < 1 || stack[0] != 2 {
+				t.Fatalf(`Incorrect response: %v`, stack)
+			}
+		}
+		t.Run(`with`, func(t *testing.T) {
+			pool.With(func(mod api.Module) {
+				stack, err := mod.ExportedFunction("add").Call(ctx, 1, 1)
+				if err != nil {
+					t.Fatalf(`%v`, err)
+				}
+				if len(stack) < 1 || stack[0] != 2 {
+					t.Fatalf(`Incorrect response: %v`, stack)
+				}
+			})
+		})
+	})
+	t.Run(`invalid`, func(t *testing.T) {
+		t.Run(`src`, func(t *testing.T) {
+			_, err := New(ctx, runtime, []byte(`invalid`), cfg)
+			if err == nil {
+				t.Fatal(`Pool instantiation should have failed`)
+			}
+		})
+		t.Run(`main`, func(t *testing.T) {
+			_, err := New(ctx, runtime, srcInvalid, cfg)
+			if err == nil {
+				t.Fatal(`Pool instantiation should have failed`)
+			}
+		})
+	})
+	t.Run(`limit`, func(t *testing.T) {
+		t.Run(`zero`, func(t *testing.T) {
+			_, err := New(ctx, runtime, src, cfg, WithLimit(-1))
+			if err != nil {
+				t.Fatalf(`%v`, err)
+			}
+		})
+		t.Run(`block`, func(t *testing.T) {
+			pool, err := New(ctx, runtime, src, cfg, WithLimit(1))
+			if err != nil {
+				t.Fatalf(`%v`, err)
+			}
+			mod := pool.Get()
+			defer pool.Put(mod)
+			got := make(chan bool)
+			go func() {
+				mod2 := pool.Get()
+				defer pool.Put(mod2)
+				got <- true
+			}()
+			select {
+			case <-got:
+				t.Fatalf("Got second module intance")
+			case <-time.After(time.Millisecond):
+			}
+		})
+	})
 }
 
 func BenchmarkModule(b *testing.B) {
