@@ -3,11 +3,11 @@
 A wazero module instance pool.
 
 [![Go Reference](https://godoc.org/github.com/pantopic/wazero-pool?status.svg)](https://godoc.org/github.com/pantopic/wazero-pool)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pantopic/wazero-pool)](https://goreportcard.com/report/github.com/pantopic/wazero-pool)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pantopic/wazero-pool?1)](https://goreportcard.com/report/github.com/pantopic/wazero-pool)
 [![Go Coverage](https://github.com/pantopic/wazero-pool/wiki/coverage.svg)](https://raw.githack.com/wiki/pantopic/wazero-pool/coverage.html)
 
-When using with webassembly modules, it is frequently more advantageous to work with a homogeneous set of module
-instances rather than a single instance. This package provides a common approach and interface to manage pools of
+When working with webassembly modules, it is frequently more advantageous to use a homogeneous set of module instances
+rather than a single instance. This package provides a common approach and interface to manage pools of
 wazero module instances.
 
 ```go
