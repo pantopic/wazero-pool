@@ -30,25 +30,25 @@ var src []byte
 func main() {
 	ctx := context.Background()
 	runtime := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig())
-    wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
-    cfg := wazero.NewModuleConfig()
+	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
+	cfg := wazero.NewModuleConfig()
 
-    pool, err := wazeropool.New(ctx, runtime, src, cfg)
-    if err != nil {
-        panic(err)
-    }
-    pool.With(func(mod api.Module) {
-        _, err := mod.ExportedFunction(`test1`).Call(ctx)
-        if err != nil {
-            panic(err)
-        }
-        _, err := mod.ExportedFunction(`test2`).Call(ctx)
-        if err != nil {
-            panic(err)
-        }
-    })
+	pool, err := wazeropool.New(ctx, runtime, src, cfg)
+	if err != nil {
+		panic(err)
+	}
+	pool.With(func(mod api.Module) {
+		_, err := mod.ExportedFunction(`test1`).Call(ctx)
+		if err != nil {
+			panic(err)
+		}
+		_, err := mod.ExportedFunction(`test2`).Call(ctx)
+		if err != nil {
+			panic(err)
+		}
+	})
 
-    // ...
+	// ...
 }
 ```
 
@@ -62,9 +62,9 @@ Supports explicit `limit` to prevent unbounded memory growth.
 
 ```go
 pool, err := wazeropool.New(ctx, runtime, src, cfg, 
-    wazeropool.WithLimit(2))
+	wazeropool.WithLimit(2))
 if err != nil {
-    panic(err)
+	panic(err)
 }
 mod1 := pool.Get()
 mod2 := pool.Get()
