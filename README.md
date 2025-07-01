@@ -78,18 +78,22 @@ in other ways.
 
 ```go
 > make bench
-BenchmarkModule/add/linear-16                    7618785               159.1 ns/op
-BenchmarkModule/add/parallel-2-16                2910556               417.4 ns/op
-BenchmarkModule/add/parallel-4-16                2496784               491.0 ns/op
-BenchmarkModule/add/parallel-8-16                1883826               652.5 ns/op
-BenchmarkModule/add/parallel-16-16               1665798               729.2 ns/op
-BenchmarkModule/add/parallel-0-16                3688936               347.6 ns/op
-BenchmarkModule/microsleep/linear-16               17337             70915 ns/op
-BenchmarkModule/microsleep/parallel-2-16           84289             14626 ns/op
-BenchmarkModule/microsleep/parallel-4-16          110790             10413 ns/op
-BenchmarkModule/microsleep/parallel-8-16          694129              2046 ns/op
-BenchmarkModule/microsleep/parallel-16-16        1261778               954.5 ns/op
-BenchmarkModule/microsleep/parallel-0-16         2362352               496.5 ns/op
+BenchmarkModule/add/raw-16                      31112986                38.95 ns/op
+BenchmarkModule/add/wrapped-16                  26988614                45.59 ns/op
+BenchmarkModule/add/pooled-16                    7362813               160.9 ns/op
+BenchmarkModule/add/parallel-2-16                2847218               445.3 ns/op
+BenchmarkModule/add/parallel-4-16                2397896               508.7 ns/op
+BenchmarkModule/add/parallel-8-16                1846426               656.6 ns/op
+BenchmarkModule/add/parallel-16-16               1676278               745.8 ns/op
+BenchmarkModule/add/parallel-0-16                3551059               331.8 ns/op
+BenchmarkModule/microsleep/raw-16                  30891             40574 ns/op
+BenchmarkModule/microsleep/wrapped-16              25706             48160 ns/op
+BenchmarkModule/microsleep/pooled-16               12202             94872 ns/op
+BenchmarkModule/microsleep/parallel-2-16           83138             14738 ns/op
+BenchmarkModule/microsleep/parallel-4-16          109393             11234 ns/op
+BenchmarkModule/microsleep/parallel-8-16          731980              1714 ns/op
+BenchmarkModule/microsleep/parallel-16-16        1258392               969.3 ns/op
+BenchmarkModule/microsleep/parallel-0-16         2359347               517.5 ns/op
 ```
 
 ## Roadmap

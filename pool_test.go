@@ -136,7 +136,34 @@ func BenchmarkModule(b *testing.B) {
 			if err != nil {
 				b.Fatalf(`%v`, err)
 			}
-			b.Run(`linear`, func(b *testing.B) {
+			b.Run(`raw`, func(b *testing.B) {
+				mod := pool.Get().(*wrapper).Module
+				fn := mod.ExportedFunction(name)
+				for b.Loop() {
+					stack, err := fn.Call(ctx, 1, 1)
+					if err != nil {
+						b.Fatalf(`%v`, err)
+					}
+					if len(stack) < 1 || stack[0] != 2 {
+						b.Fatalf(`Incorrect response: %v`, stack)
+					}
+				}
+			})
+			goruntime.GC()
+			b.Run(`wrapped`, func(b *testing.B) {
+				mod := pool.Get()
+				for b.Loop() {
+					stack, err := mod.ExportedFunction(name).Call(ctx, 1, 1)
+					if err != nil {
+						b.Fatalf(`%v`, err)
+					}
+					if len(stack) < 1 || stack[0] != 2 {
+						b.Fatalf(`Incorrect response: %v`, stack)
+					}
+				}
+			})
+			goruntime.GC()
+			b.Run(`pooled`, func(b *testing.B) {
 				for b.Loop() {
 					pool.With(func(mod api.Module) {
 						stack, err := mod.ExportedFunction(name).Call(ctx, 1, 1)
