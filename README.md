@@ -88,8 +88,6 @@ BenchmarkModule/microsleep/parallel-2-16           93465             14592 ns/op
 BenchmarkModule/microsleep/parallel-4-16          696016              2530 ns/op
 BenchmarkModule/microsleep/parallel-16-16        1000000              1678 ns/op
 BenchmarkModule/microsleep/parallel-0-16         1000000              1417 ns/op
-PASS
-ok      github.com/pantopic/wazero-pool 15.621s
 ```
 
 ## Roadmap
