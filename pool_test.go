@@ -102,13 +102,15 @@ func TestModule(t *testing.T) {
 		goruntime.GC()
 		goruntime.GC()
 		for range 5 {
-			var mod = pool.Get()
+			w := pool.Get()
+			mod := w.(*wrapper).Module
 			goruntime.GC()
 			goruntime.GC()
 			if mod.IsClosed() {
 				t.Fatal(`Module should not be closed.`)
 			}
-			pool.Put(mod)
+			pool.Put(w)
+			w = nil
 			goruntime.GC()
 			goruntime.GC()
 			if !mod.IsClosed() {
@@ -129,11 +131,12 @@ func BenchmarkModule(b *testing.B) {
 		"microsleep",
 	} {
 		b.Run(name, func(b *testing.B) {
+			goruntime.GC()
+			pool, err := New(ctx, runtime, src, cfg)
+			if err != nil {
+				b.Fatalf(`%v`, err)
+			}
 			b.Run(`linear`, func(b *testing.B) {
-				pool, err := New(ctx, runtime, src, cfg)
-				if err != nil {
-					b.Fatalf(`%v`, err)
-				}
 				for b.Loop() {
 					pool.With(func(mod api.Module) {
 						stack, err := mod.ExportedFunction(name).Call(ctx, 1, 1)
@@ -146,7 +149,8 @@ func BenchmarkModule(b *testing.B) {
 					})
 				}
 			})
-			for _, n := range []int{2, 4, 16, 0} {
+			for _, n := range []int{2, 4, 8, 16, 0} {
+				goruntime.GC()
 				pool, err := New(ctx, runtime, src, cfg, WithLimit(n))
 				if err != nil {
 					b.Fatalf(`%v`, err)
