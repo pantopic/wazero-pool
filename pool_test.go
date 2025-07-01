@@ -22,8 +22,7 @@ var srcInvalid []byte
 func TestModule(t *testing.T) {
 	ctx := context.Background()
 	runtime := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
-		WithMemoryLimitPages(256).
-		WithMemoryCapacityFromMax(true))
+		WithMemoryLimitPages(256)) // 16 MB
 	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 	cfg := wazero.NewModuleConfig()
 	t.Run(`base`, func(t *testing.T) {
@@ -122,8 +121,7 @@ func TestModule(t *testing.T) {
 func BenchmarkModule(b *testing.B) {
 	ctx := context.Background()
 	runtime := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
-		WithMemoryLimitPages(256).
-		WithMemoryCapacityFromMax(true))
+		WithMemoryLimitPages(256)) // 16 MB
 	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 	cfg := wazero.NewModuleConfig().WithSysNanosleep()
 	for _, name := range []string{
