@@ -63,11 +63,6 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 	for _, opt := range opts {
 		opt(m)
 	}
-	if m.limit != nil {
-		for range cap(m.limit) - 1 {
-			m.limit <- struct{}{}
-		}
-	}
 	m.ctx = ctx
 	m.wrappers = &sync.Pool{New: func() any { return new(wrapper) }}
 	m.pool = &sync.Pool{
@@ -78,6 +73,9 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 			return w
 		},
 	}
+	if m.limit != nil {
+		m.limit <- struct{}{}
+	}
 	m.Put(mod)
 	return
 }
@@ -87,7 +85,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 // If limit is non-zero and the module is not [Put] back, a deadlock may occur.
 func (m *instancePool) Get() api.Module {
 	if m.limit != nil {
-		<-m.limit
+		m.limit <- struct{}{}
 	}
 	w := m.pool.Get().(*wrapper)
 	w.cleanup.Stop()
@@ -102,7 +100,7 @@ func (m *instancePool) Put(mod api.Module) {
 	w.cleanup = runtime.AddCleanup(w, func(mod api.Module) { mod.Close(context.Background()) }, mod)
 	m.pool.Put(w)
 	if m.limit != nil {
-		m.limit <- struct{}{}
+		<-m.limit
 	}
 }
 
