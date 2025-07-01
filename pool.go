@@ -40,7 +40,8 @@ type instancePool struct {
 	runtime  wazero.Runtime
 }
 
-// Module instances can't be garbage collected directly so we use
+// Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
+// garbage collected.
 type wrapper struct {
 	mod api.Module
 }
