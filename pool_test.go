@@ -96,10 +96,12 @@ func TestModule(t *testing.T) {
 		})
 	})
 	t.Run(`cleanup`, func(t *testing.T) {
-		pool, err := New(ctx, runtime, src, cfg, WithLimit(1))
+		pool, err := New(ctx, runtime, src, cfg, WithLimit(2))
 		if err != nil {
 			t.Fatalf(`%v`, err)
 		}
+		goruntime.GC()
+		goruntime.GC()
 		for range 5 {
 			var mod = pool.Get()
 			goruntime.GC()

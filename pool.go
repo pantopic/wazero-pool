@@ -20,7 +20,6 @@ func WithLimit(n int) Option {
 			return
 		}
 		m.limit = make(chan struct{}, n)
-		m.inuse = make(chan *wrapper, n)
 	}
 }
 
@@ -35,15 +34,16 @@ type instancePool struct {
 	compiled wazero.CompiledModule
 	ctx      context.Context
 	limit    chan struct{}
-	inuse    chan *wrapper
 	pool     *sync.Pool
 	runtime  wazero.Runtime
+	wrappers *sync.Pool
 }
 
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
 // garbage collected.
 type wrapper struct {
-	mod api.Module
+	mod     api.Module
+	cleanup runtime.Cleanup
 }
 
 // New returns a new module instance pool.
@@ -64,22 +64,21 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 		opt(m)
 	}
 	if m.limit != nil {
-		for range cap(m.limit) {
+		for range cap(m.limit) - 1 {
 			m.limit <- struct{}{}
 		}
 	}
 	m.ctx = ctx
+	m.wrappers = &sync.Pool{New: func() any { return new(wrapper) }}
 	m.pool = &sync.Pool{
 		New: func() any {
 			mod, _ := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
-			w := &wrapper{mod}
-			runtime.AddCleanup(w, func(mod api.Module) { mod.Close(ctx) }, mod)
+			w := m.wrappers.Get().(*wrapper)
+			w.mod = mod
 			return w
 		},
 	}
-	w := &wrapper{mod}
-	runtime.AddCleanup(w, func(mod api.Module) { mod.Close(ctx) }, mod)
-	m.pool.Put(w)
+	m.Put(mod)
 	return
 }
 
@@ -91,25 +90,20 @@ func (m *instancePool) Get() api.Module {
 		<-m.limit
 	}
 	w := m.pool.Get().(*wrapper)
-	mod := w.mod
-	if m.limit != nil {
-		w.mod = nil
-		m.inuse <- w
-	}
-	return mod
+	w.cleanup.Stop()
+	defer m.wrappers.Put(w)
+	return w.mod
 }
 
 // Put puts a module instance back into the pool.
 func (m *instancePool) Put(mod api.Module) {
-	var w *wrapper
-	if m.limit != nil {
-		w = <-m.inuse
-		w.mod = mod
-		m.limit <- struct{}{}
-	} else {
-		w = &wrapper{mod}
-	}
+	var w = m.wrappers.Get().(*wrapper)
+	w.mod = mod
+	w.cleanup = runtime.AddCleanup(w, func(mod api.Module) { mod.Close(context.Background()) }, mod)
 	m.pool.Put(w)
+	if m.limit != nil {
+		m.limit <- struct{}{}
+	}
 }
 
 // With automatically [Get]s a module instance from the pool and [Put]s it back after the function returns.
