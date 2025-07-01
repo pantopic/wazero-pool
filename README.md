@@ -78,17 +78,29 @@ in other ways.
 
 ```go
 > make bench
-BenchmarkModule/add/linear-16                    1181882              1009 ns/op
-BenchmarkModule/add/parallel-2-16                1038873              1042 ns/op
-BenchmarkModule/add/parallel-4-16                1000000              1070 ns/op
-BenchmarkModule/add/parallel-16-16               1000000              1307 ns/op
-BenchmarkModule/add/parallel-0-16                3431593               325.1 ns/op
-BenchmarkModule/microsleep/linear-16                6487            156801 ns/op
-BenchmarkModule/microsleep/parallel-2-16           93465             14592 ns/op
-BenchmarkModule/microsleep/parallel-4-16          696016              2530 ns/op
-BenchmarkModule/microsleep/parallel-16-16        1000000              1678 ns/op
-BenchmarkModule/microsleep/parallel-0-16         1000000              1417 ns/op
+BenchmarkModule/add/raw-16                      31112986                38.95 ns/op
+BenchmarkModule/add/wrapped-16                  26988614                45.59 ns/op
+BenchmarkModule/add/pooled-16                    7362813               160.9 ns/op
+BenchmarkModule/add/parallel-2-16                2847218               445.3 ns/op
+BenchmarkModule/add/parallel-4-16                2397896               508.7 ns/op
+BenchmarkModule/add/parallel-8-16                1846426               656.6 ns/op
+BenchmarkModule/add/parallel-16-16               1676278               745.8 ns/op
+BenchmarkModule/add/parallel-0-16                3551059               331.8 ns/op
+BenchmarkModule/microsleep/raw-16                  30891             40574 ns/op
+BenchmarkModule/microsleep/wrapped-16              25706             48160 ns/op
+BenchmarkModule/microsleep/pooled-16               12202             94872 ns/op
+BenchmarkModule/microsleep/parallel-2-16           83138             14738 ns/op
+BenchmarkModule/microsleep/parallel-4-16          109393             11234 ns/op
+BenchmarkModule/microsleep/parallel-8-16          731980              1714 ns/op
+BenchmarkModule/microsleep/parallel-16-16        1258392               969.3 ns/op
+BenchmarkModule/microsleep/parallel-0-16         2359347               517.5 ns/op
 ```
+
+These benchmark results illustrate the throughput advantages pooling can have for high latency operations and the throughput disadvantages it can introduce for low latency operations.
+
+![Effect of Latency and Concurrency on Throughput](https://github.com/user-attachments/assets/03d9806d-aa81-4d39-8855-50c08f4d01c2)
+
+Generally, this instance pool will be more useful for modules that make callbacks to host modules and less useful for pure functional modules.
 
 ## Roadmap
 

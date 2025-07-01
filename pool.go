@@ -36,14 +36,28 @@ type instancePool struct {
 	limit    chan struct{}
 	pool     *sync.Pool
 	runtime  wazero.Runtime
-	wrappers *sync.Pool
 }
 
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
-// garbage collected.
+// garbage collected. The wrapper also caches exported function references automatically to reduce call latency.
 type wrapper struct {
-	mod     api.Module
+	api.Module
+
+	cache   map[string]api.Function
 	cleanup runtime.Cleanup
+}
+
+func newWrapper() *wrapper {
+	return &wrapper{cache: make(map[string]api.Function)}
+}
+
+func (w *wrapper) ExportedFunction(name string) (fn api.Function) {
+	fn, ok := w.cache[name]
+	if !ok {
+		fn = w.Module.ExportedFunction(name)
+		w.cache[name] = fn
+	}
+	return
 }
 
 // New returns a new module instance pool.
@@ -52,7 +66,8 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 	if err != nil {
 		return
 	}
-	mod, err := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
+	w := newWrapper()
+	w.Module, err = r.InstantiateModule(ctx, compiled, cfg.WithName(""))
 	if err != nil {
 		return
 	}
@@ -64,19 +79,17 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 		opt(m)
 	}
 	m.ctx = ctx
-	m.wrappers = &sync.Pool{New: func() any { return new(wrapper) }}
 	m.pool = &sync.Pool{
 		New: func() any {
-			mod, _ := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
-			w := m.wrappers.Get().(*wrapper)
-			w.mod = mod
+			w := newWrapper()
+			w.Module, _ = r.InstantiateModule(ctx, compiled, cfg.WithName(""))
 			return w
 		},
 	}
 	if m.limit != nil {
 		m.limit <- struct{}{}
 	}
-	m.Put(mod)
+	m.Put(w)
 	return
 }
 
@@ -89,15 +102,13 @@ func (m *instancePool) Get() api.Module {
 	}
 	w := m.pool.Get().(*wrapper)
 	w.cleanup.Stop()
-	defer m.wrappers.Put(w)
-	return w.mod
+	return w
 }
 
 // Put puts a module instance back into the pool.
 func (m *instancePool) Put(mod api.Module) {
-	var w = m.wrappers.Get().(*wrapper)
-	w.mod = mod
-	w.cleanup = runtime.AddCleanup(w, func(mod api.Module) { mod.Close(context.Background()) }, mod)
+	w := mod.(*wrapper)
+	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
 	m.pool.Put(w)
 	if m.limit != nil {
 		<-m.limit
