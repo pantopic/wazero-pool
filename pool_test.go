@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	goruntime "runtime"
 	"testing"
 	"time"
 
@@ -93,6 +94,26 @@ func TestModule(t *testing.T) {
 			case <-time.After(time.Millisecond):
 			}
 		})
+	})
+	t.Run(`cleanup`, func(t *testing.T) {
+		pool, err := New(ctx, runtime, src, cfg, WithLimit(1))
+		if err != nil {
+			t.Fatalf(`%v`, err)
+		}
+		for range 5 {
+			var mod = pool.Get()
+			goruntime.GC()
+			goruntime.GC()
+			if mod.IsClosed() {
+				t.Fatal(`Module should not be closed.`)
+			}
+			pool.Put(mod)
+			goruntime.GC()
+			goruntime.GC()
+			if !mod.IsClosed() {
+				t.Fatal(`Module should be closed.`)
+			}
+		}
 	})
 }
 

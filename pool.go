@@ -2,6 +2,7 @@ package wazeropool
 
 import (
 	"context"
+	"runtime"
 	"sync"
 
 	"github.com/tetratelabs/wazero"
@@ -19,6 +20,7 @@ func WithLimit(n int) Option {
 			return
 		}
 		m.limit = make(chan struct{}, n)
+		m.inuse = make(chan *wrapper, n)
 	}
 }
 
@@ -33,8 +35,14 @@ type instancePool struct {
 	compiled wazero.CompiledModule
 	ctx      context.Context
 	limit    chan struct{}
+	inuse    chan *wrapper
 	pool     *sync.Pool
 	runtime  wazero.Runtime
+}
+
+// Module instances can't be garbage collected directly so we use
+type wrapper struct {
+	mod api.Module
 }
 
 // New returns a new module instance pool.
@@ -63,10 +71,14 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 	m.pool = &sync.Pool{
 		New: func() any {
 			mod, _ := r.InstantiateModule(ctx, compiled, cfg.WithName(""))
-			return mod
+			w := &wrapper{mod}
+			runtime.AddCleanup(w, func(mod api.Module) { mod.Close(ctx) }, mod)
+			return w
 		},
 	}
-	m.pool.Put(mod)
+	w := &wrapper{mod}
+	runtime.AddCleanup(w, func(mod api.Module) { mod.Close(ctx) }, mod)
+	m.pool.Put(w)
 	return
 }
 
@@ -77,15 +89,26 @@ func (m *instancePool) Get() api.Module {
 	if m.limit != nil {
 		<-m.limit
 	}
-	return m.pool.Get().(api.Module)
+	w := m.pool.Get().(*wrapper)
+	mod := w.mod
+	if m.limit != nil {
+		w.mod = nil
+		m.inuse <- w
+	}
+	return mod
 }
 
 // Put puts a module instance back into the pool.
 func (m *instancePool) Put(mod api.Module) {
-	m.pool.Put(mod)
+	var w *wrapper
 	if m.limit != nil {
+		w = <-m.inuse
+		w.mod = mod
 		m.limit <- struct{}{}
+	} else {
+		w = &wrapper{mod}
 	}
+	m.pool.Put(w)
 }
 
 // With automatically [Get]s a module instance from the pool and [Put]s it back after the function returns.
