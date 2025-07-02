@@ -98,7 +98,7 @@ BenchmarkModule/microsleep/parallel-0-16         2359347               517.5 ns/
 
 These benchmark results illustrate the throughput advantages pooling can have for high latency operations and the throughput disadvantages it can introduce for low latency operations.
 
-![Effect of Latency and Concurrency on Throughput](https://github.com/user-attachments/assets/03d9806d-aa81-4d39-8855-50c08f4d01c2)
+![Effect of latency and concurrency on throughput (1)](https://github.com/user-attachments/assets/ac9fe721-8083-4b45-bc23-e3ceb9599ed7)
 
 Generally, this instance pool will be more useful for modules that make callbacks to host modules and less useful for pure functional modules.
 
