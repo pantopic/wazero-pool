@@ -10,11 +10,11 @@ import (
 )
 
 // Option represents a constructor option.
-type Option func(*instancePool)
+type Option func(*instance)
 
 // WithLimit sets the maximum pool size. Set to 0 for unlimited pool (default)
 func WithLimit(n int) Option {
-	return func(m *instancePool) {
+	return func(m *instance) {
 		if n < 1 {
 			m.limit = nil
 			return
@@ -23,14 +23,14 @@ func WithLimit(n int) Option {
 	}
 }
 
-// InstancePool represents a module instance pool
-type InstancePool interface {
+// Instance represents a module instance pool
+type Instance interface {
 	Get() api.Module
 	Put(mod api.Module)
-	With(fn func(mod api.Module))
+	Run(fn func(mod api.Module))
 }
 
-type instancePool struct {
+type instance struct {
 	compiled wazero.CompiledModule
 	ctx      context.Context
 	limit    chan struct{}
@@ -61,7 +61,7 @@ func (w *wrapper) ExportedFunction(name string) (fn api.Function) {
 }
 
 // New returns a new module instance pool.
-func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleConfig, opts ...Option) (m *instancePool, err error) {
+func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleConfig, opts ...Option) (m *instance, err error) {
 	compiled, err := r.CompileModule(ctx, src)
 	if err != nil {
 		return
@@ -71,7 +71,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 	if err != nil {
 		return
 	}
-	m = &instancePool{
+	m = &instance{
 		compiled: compiled,
 		runtime:  r,
 	}
@@ -96,7 +96,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, cfg wazero.ModuleCon
 // Get returns a module instance from the pool.
 // If limit is non-zero, [Get] will block until an instance becomes available.
 // If limit is non-zero and the module is not [Put] back, a deadlock may occur.
-func (m *instancePool) Get() api.Module {
+func (m *instance) Get() api.Module {
 	if m.limit != nil {
 		m.limit <- struct{}{}
 	}
@@ -106,7 +106,7 @@ func (m *instancePool) Get() api.Module {
 }
 
 // Put puts a module instance back into the pool.
-func (m *instancePool) Put(mod api.Module) {
+func (m *instance) Put(mod api.Module) {
 	w := mod.(*wrapper)
 	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
 	m.pool.Put(w)
@@ -115,8 +115,8 @@ func (m *instancePool) Put(mod api.Module) {
 	}
 }
 
-// With automatically [Get]s a module instance from the pool and [Put]s it back after the function returns.
-func (m *instancePool) With(fn func(mod api.Module)) {
+// Run automatically [Get]s a module instance from the pool and [Put]s it back after the function returns.
+func (m *instance) Run(fn func(mod api.Module)) {
 	mod := m.Get()
 	defer m.Put(mod)
 	fn(mod)

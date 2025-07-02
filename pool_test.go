@@ -42,7 +42,7 @@ func TestModule(t *testing.T) {
 			}
 		}
 		t.Run(`with`, func(t *testing.T) {
-			pool.With(func(mod api.Module) {
+			pool.Run(func(mod api.Module) {
 				stack, err := mod.ExportedFunction("add").Call(ctx, 1, 1)
 				if err != nil {
 					t.Fatalf(`%v`, err)
@@ -165,7 +165,7 @@ func BenchmarkModule(b *testing.B) {
 			goruntime.GC()
 			b.Run(`pooled`, func(b *testing.B) {
 				for b.Loop() {
-					pool.With(func(mod api.Module) {
+					pool.Run(func(mod api.Module) {
 						stack, err := mod.ExportedFunction(name).Call(ctx, 1, 1)
 						if err != nil {
 							b.Fatalf(`%v`, err)
@@ -186,7 +186,7 @@ func BenchmarkModule(b *testing.B) {
 					b.SetParallelism(n)
 					b.RunParallel(func(pb *testing.PB) {
 						for pb.Next() {
-							pool.With(func(mod api.Module) {
+							pool.Run(func(mod api.Module) {
 								stack, err := mod.ExportedFunction(name).Call(ctx, 1, 1)
 								if err != nil {
 									b.Fatalf(`%v`, err)
