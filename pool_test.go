@@ -26,7 +26,7 @@ func TestModule(t *testing.T) {
 	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
 	cfg := wazero.NewModuleConfig()
 	t.Run(`base`, func(t *testing.T) {
-		pool, err := New(ctx, runtime, src, cfg)
+		pool, err := New(ctx, runtime, src)
 		if err != nil {
 			t.Fatalf(`%v`, err)
 		}
@@ -55,13 +55,13 @@ func TestModule(t *testing.T) {
 	})
 	t.Run(`invalid`, func(t *testing.T) {
 		t.Run(`src`, func(t *testing.T) {
-			_, err := New(ctx, runtime, []byte(`invalid`), cfg)
+			_, err := New(ctx, runtime, []byte(`invalid`))
 			if err == nil {
 				t.Fatal(`Pool instantiation should have failed`)
 			}
 		})
 		t.Run(`main`, func(t *testing.T) {
-			_, err := New(ctx, runtime, srcInvalid, cfg)
+			_, err := New(ctx, runtime, srcInvalid)
 			if err == nil {
 				t.Fatal(`Pool instantiation should have failed`)
 			}
@@ -69,13 +69,13 @@ func TestModule(t *testing.T) {
 	})
 	t.Run(`limit`, func(t *testing.T) {
 		t.Run(`zero`, func(t *testing.T) {
-			_, err := New(ctx, runtime, src, cfg, WithLimit(-1))
+			_, err := New(ctx, runtime, src, WithLimit(-1))
 			if err != nil {
 				t.Fatalf(`%v`, err)
 			}
 		})
 		t.Run(`block`, func(t *testing.T) {
-			pool, err := New(ctx, runtime, src, cfg, WithLimit(1))
+			pool, err := New(ctx, runtime, src, WithLimit(1))
 			if err != nil {
 				t.Fatalf(`%v`, err)
 			}
@@ -95,7 +95,7 @@ func TestModule(t *testing.T) {
 		})
 	})
 	t.Run(`cleanup`, func(t *testing.T) {
-		pool, err := New(ctx, runtime, src, cfg, WithLimit(2))
+		pool, err := New(ctx, runtime, src, WithModuleConfig(cfg), WithLimit(2))
 		if err != nil {
 			t.Fatalf(`%v`, err)
 		}
@@ -132,7 +132,7 @@ func BenchmarkModule(b *testing.B) {
 	} {
 		b.Run(name, func(b *testing.B) {
 			goruntime.GC()
-			pool, err := New(ctx, runtime, src, cfg)
+			pool, err := New(ctx, runtime, src, WithModuleConfig(cfg))
 			if err != nil {
 				b.Fatalf(`%v`, err)
 			}
@@ -178,7 +178,7 @@ func BenchmarkModule(b *testing.B) {
 			})
 			for _, n := range []int{2, 4, 8, 16, 0} {
 				goruntime.GC()
-				pool, err := New(ctx, runtime, src, cfg, WithLimit(n))
+				pool, err := New(ctx, runtime, src, WithModuleConfig(cfg), WithLimit(n))
 				if err != nil {
 					b.Fatalf(`%v`, err)
 				}
