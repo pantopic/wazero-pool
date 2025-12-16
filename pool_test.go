@@ -113,6 +113,7 @@ func TestModule(t *testing.T) {
 			w = nil
 			goruntime.GC()
 			goruntime.GC()
+			goruntime.GC()
 			if !mod.IsClosed() {
 				t.Fatal(`Module should be closed.`)
 			}

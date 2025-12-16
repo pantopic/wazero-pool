@@ -9,11 +9,6 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
-type Factory interface {
-	// New returns a new module instance pool.
-	New(ctx context.Context, src []byte, opts ...Option) (m *instance, err error)
-}
-
 // New returns a new module instance pool.
 func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *instance, err error) {
 	compiled, err := r.CompileModule(ctx, src)
@@ -60,7 +55,8 @@ type Instance interface {
 	// Put puts a module instance back into the pool.
 	Put(mod api.Module)
 
-	// Run automatically [Get]s a module instance from the pool and [Put]s it back after the function returns.
+	// Run is a conveience method.
+	// It [Get]s a module instance from the pool and [Put]s it back after the function returns.
 	Run(fn func(mod api.Module))
 }
 
