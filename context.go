@@ -4,16 +4,16 @@ import (
 	"context"
 )
 
-var DefaultCtxKeyWazeroPool = `__wazero_pool`
+var ctxKeyWazeroPool = `__wazero_pool`
 
 func ContextSet(ctx context.Context, pool Instance) context.Context {
-	return context.WithValue(ctx, DefaultCtxKeyWazeroPool, pool)
+	return context.WithValue(ctx, ctxKeyWazeroPool, pool)
 }
 
 func ContextCopy(dst, src context.Context) context.Context {
-	return context.WithValue(dst, DefaultCtxKeyWazeroPool, Context(src))
+	return context.WithValue(dst, ctxKeyWazeroPool, FromContext(src))
 }
 
-func Context(ctx context.Context) Instance {
-	return ctx.Value(DefaultCtxKeyWazeroPool).(Instance)
+func FromContext(ctx context.Context) Instance {
+	return ctx.Value(ctxKeyWazeroPool).(Instance)
 }
