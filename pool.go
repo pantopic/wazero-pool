@@ -19,6 +19,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 		compiled: compiled,
 		config:   wazero.NewModuleConfig(),
 		runtime:  r,
+		stats:    new(Stats),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -58,6 +59,9 @@ type Instance interface {
 	// Run is a conveience method.
 	// It [Get]s a module instance from the pool and [Put]s it back after the function returns.
 	Run(fn func(mod api.Module))
+
+	// Stats returns statistics about pool usage and resets the stats.
+	Stats() Stats
 }
 
 type instance struct {
@@ -66,6 +70,7 @@ type instance struct {
 	limit    chan struct{}
 	pool     *sync.Pool
 	runtime  wazero.Runtime
+	stats    *Stats
 }
 
 func (m *instance) Get() api.Module {
@@ -80,6 +85,7 @@ func (m *instance) Get() api.Module {
 func (m *instance) Put(mod api.Module) {
 	w := mod.(*wrapper)
 	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
+	m.stats.put(w.Module.Memory().Size(), len(m.limit))
 	m.pool.Put(w)
 	if m.limit != nil {
 		<-m.limit
@@ -94,6 +100,10 @@ func (m *instance) Run(fn func(mod api.Module)) {
 
 func (m *instance) Compiled() wazero.CompiledModule {
 	return m.compiled
+}
+
+func (m *instance) Stats() (s Stats) {
+	return m.stats.harvest()
 }
 
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
@@ -115,5 +125,51 @@ func (w *wrapper) ExportedFunction(name string) (fn api.Function) {
 		fn = w.Module.ExportedFunction(name)
 		w.cache[name] = fn
 	}
+	return
+}
+
+type Stats struct {
+	sync.Mutex
+
+	Total   uint64
+	MemSize uint64
+	MemMax  uint32
+	MemMin  uint32
+	Active  uint64
+	ActMin  int
+	ActMax  int
+}
+
+func (s *Stats) put(memSize uint32, active int) {
+	s.Lock()
+	defer s.Unlock()
+	s.Total++
+	s.MemSize += uint64(memSize)
+	if s.MemMax < memSize {
+		s.MemMax = memSize
+	}
+	if s.MemMin == 0 || s.MemMin > memSize {
+		s.MemMin = memSize
+	}
+	s.Active += uint64(active)
+	if s.ActMax < active {
+		s.ActMax = active
+	}
+	if s.ActMin == 0 || s.ActMin > active {
+		s.ActMin = active
+	}
+}
+
+func (s *Stats) harvest() (c Stats) {
+	s.Lock()
+	defer s.Unlock()
+	c = *s
+	s.Total = 0
+	s.MemSize = 0
+	s.MemMax = 0
+	s.MemMin = 0
+	s.Active = 0
+	s.ActMax = 0
+	s.ActMin = 0
 	return
 }
