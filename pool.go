@@ -19,7 +19,6 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 		compiled: compiled,
 		config:   wazero.NewModuleConfig(),
 		runtime:  r,
-		stats:    new(Stats),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -29,6 +28,8 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	if err != nil {
 		return
 	}
+	print(`compiled module with memory size `)
+	println(w.Module.Memory().Size())
 	m.pool = &sync.Pool{
 		New: func() any {
 			w := newWrapper()
@@ -65,12 +66,14 @@ type Instance interface {
 }
 
 type instance struct {
+	sync.Mutex
+
 	compiled wazero.CompiledModule
 	config   wazero.ModuleConfig
 	limit    chan struct{}
 	pool     *sync.Pool
 	runtime  wazero.Runtime
-	stats    *Stats
+	stats    Stats
 }
 
 func (m *instance) Get() api.Module {
@@ -84,8 +87,18 @@ func (m *instance) Get() api.Module {
 
 func (m *instance) Put(mod api.Module) {
 	w := mod.(*wrapper)
+	if w.Module.Memory().Size() > 16<<20 {
+		println(`recycled module with memory size`, w.Module.Memory().Size())
+		// If the module instance has grown too large, don't put it back in the pool.
+		w.Module.Close(context.Background())
+		m.stats.put(&m.Mutex, w.Module.Memory().Size(), 0)
+		if m.limit != nil {
+			<-m.limit
+		}
+		return
+	}
 	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
-	m.stats.put(w.Module.Memory().Size(), len(m.limit))
+	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit))
 	m.pool.Put(w)
 	if m.limit != nil {
 		<-m.limit
@@ -103,7 +116,11 @@ func (m *instance) Compiled() wazero.CompiledModule {
 }
 
 func (m *instance) Stats() (s Stats) {
-	return m.stats.harvest()
+	return m.stats.harvest(&m.Mutex)
+}
+
+func (m *instance) Size() (s Stats) {
+	return m.stats.harvest(&m.Mutex)
 }
 
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
@@ -129,8 +146,6 @@ func (w *wrapper) ExportedFunction(name string) (fn api.Function) {
 }
 
 type Stats struct {
-	sync.Mutex
-
 	Total   uint64
 	MemSize uint64
 	MemMax  uint32
@@ -140,9 +155,9 @@ type Stats struct {
 	ActMax  int
 }
 
-func (s *Stats) put(memSize uint32, active int) {
-	s.Lock()
-	defer s.Unlock()
+func (s *Stats) put(m *sync.Mutex, memSize uint32, active int) {
+	m.Lock()
+	defer m.Unlock()
 	s.Total++
 	s.MemSize += uint64(memSize)
 	if s.MemMax < memSize {
@@ -160,9 +175,9 @@ func (s *Stats) put(memSize uint32, active int) {
 	}
 }
 
-func (s *Stats) harvest() (c Stats) {
-	s.Lock()
-	defer s.Unlock()
+func (s *Stats) harvest(m *sync.Mutex) (c Stats) {
+	m.Lock()
+	defer m.Unlock()
 	c = *s
 	s.Total = 0
 	s.MemSize = 0
