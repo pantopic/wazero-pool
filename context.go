@@ -17,11 +17,3 @@ func ContextCopy(dst, src context.Context) context.Context {
 func FromContext(ctx context.Context) Instance {
 	return ctx.Value(ctxKeyWazeroPool).(Instance)
 }
-
-var DefaultContextCopier ctxCopier
-
-type ctxCopier struct{}
-
-func (ctxCopier) ContextCopy(dst, src context.Context) context.Context {
-	return ContextCopy(dst, src)
-}
