@@ -87,7 +87,7 @@ func (m *instance) Get() api.Module {
 
 func (m *instance) Put(mod api.Module) {
 	w := mod.(*wrapper)
-	if w.Module.Memory().Size() > 16<<20 {
+	if w.Module.Memory().Size() > 32<<20 {
 		println(`recycled module with memory size`, w.Module.Memory().Size())
 		// If the module instance has grown too large, don't put it back in the pool.
 		w.Module.Close(context.Background())
