@@ -18,6 +18,20 @@ func WithLimit(n int) Option {
 	}
 }
 
+// WithName sets an optional name for the pool. Useful for debugging.
+func WithName(name string) Option {
+	return func(m *instance) {
+		m.name = name
+	}
+}
+
+// WithVersion sets an optional version for the pool. Useful for debugging.
+func WithVersion(version uint64) Option {
+	return func(m *instance) {
+		m.version = version
+	}
+}
+
 // WithModuleConfig sets the module config.
 func WithModuleConfig(cfg wazero.ModuleConfig) Option {
 	return func(m *instance) {

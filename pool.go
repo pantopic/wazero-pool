@@ -2,8 +2,10 @@ package wazeropool
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -19,12 +21,13 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 		compiled: compiled,
 		config:   wazero.NewModuleConfig(),
 		runtime:  r,
+		n:        &atomic.Uint64{},
 	}
 	for _, opt := range opts {
 		opt(m)
 	}
 	w := newWrapper()
-	w.Module, err = r.InstantiateModule(ctx, compiled, m.config.WithName(""))
+	w.Module, err = m.next(ctx)
 	if err != nil {
 		return
 	}
@@ -33,7 +36,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	m.pool = &sync.Pool{
 		New: func() any {
 			w := newWrapper()
-			w.Module, _ = r.InstantiateModule(ctx, compiled, m.config.WithName(""))
+			w.Module, _ = m.next(ctx)
 			return w
 		},
 	}
@@ -71,9 +74,20 @@ type instance struct {
 	compiled wazero.CompiledModule
 	config   wazero.ModuleConfig
 	limit    chan struct{}
+	n        *atomic.Uint64
+	name     string
 	pool     *sync.Pool
 	runtime  wazero.Runtime
 	stats    Stats
+	version  uint64
+}
+
+func (m *instance) next(ctx context.Context) (api.Module, error) {
+	var name string
+	if m.name != "" {
+		name = fmt.Sprintf(`%s:v%d:%05d`, m.name, m.version, m.n.Add(1))
+	}
+	return m.runtime.InstantiateModule(ctx, m.compiled, m.config.WithName(name))
 }
 
 func (m *instance) Get() api.Module {
@@ -88,7 +102,7 @@ func (m *instance) Get() api.Module {
 func (m *instance) Put(mod api.Module) {
 	w := mod.(*wrapper)
 	if w.Module.Memory().Size() > 32<<20 {
-		println(`recycled module with memory size`, w.Module.Memory().Size())
+		println(`recycled module with memory size`, w.Module.Memory().Size(), `in`, w.Module.Name())
 		// If the module instance has grown too large, don't put it back in the pool.
 		w.Module.Close(context.Background())
 		m.stats.put(&m.Mutex, w.Module.Memory().Size(), 0)
