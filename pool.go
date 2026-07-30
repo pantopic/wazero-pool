@@ -21,6 +21,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 		compiled: compiled,
 		config:   wazero.NewModuleConfig(),
 		runtime:  r,
+		memcap:   16 << 20,
 		n:        &atomic.Uint64{},
 	}
 	for _, opt := range opts {
@@ -33,15 +34,17 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	}
 	print(`compiled module with memory size `)
 	println(w.Module.Memory().Size())
-	m.pool = &sync.Pool{
-		New: func() any {
-			w := newWrapper()
-			w.Module, _ = m.next(ctx)
-			return w
-		},
+	fn := func() any {
+		w := newWrapper()
+		w.Module, _ = m.next(ctx)
+		return w
 	}
+	m.pool = &sync.Pool{New: fn}
 	if m.limit != nil {
 		m.limit <- struct{}{}
+	}
+	if m.burst != nil {
+		m.pool2 = &sync.Pool{New: fn}
 	}
 	m.Put(w)
 	return
@@ -55,18 +58,21 @@ type Instance interface {
 	// Get returns a module instance from the pool.
 	// If limit is non-zero, [Get] will block until an instance becomes available.
 	// If limit is non-zero and the module is not [Put] back, a deadlock may occur.
-	Get() api.Module
+	// If burst is true, the burst pool will be used (ie. for high priority tasks).
+	Get(burst ...bool) api.Module
 
 	// Put puts a module instance back into the pool.
-	Put(mod api.Module)
+	Put(mod api.Module, burst ...bool)
 
 	// Run is a conveience method.
 	// It [Get]s a module instance from the pool and [Put]s it back after the function returns.
-	Run(fn func(mod api.Module))
+	Run(fn func(mod api.Module), burst ...bool)
 
 	// Stats returns statistics about pool usage and resets the stats.
 	Stats() Stats
 }
+
+var _ Instance = (*instance)(nil)
 
 type instance struct {
 	sync.Mutex
@@ -74,9 +80,12 @@ type instance struct {
 	compiled wazero.CompiledModule
 	config   wazero.ModuleConfig
 	limit    chan struct{}
+	burst    chan struct{}
+	memcap   uint32
 	n        *atomic.Uint64
 	name     string
 	pool     *sync.Pool
+	pool2    *sync.Pool
 	runtime  wazero.Runtime
 	stats    Stats
 	version  uint64
@@ -90,38 +99,55 @@ func (m *instance) next(ctx context.Context) (api.Module, error) {
 	return m.runtime.InstantiateModule(ctx, m.compiled, m.config.WithName(name))
 }
 
-func (m *instance) Get() api.Module {
+func (m *instance) Get(burst ...bool) api.Module {
+	var w *wrapper
 	if m.limit != nil {
-		m.limit <- struct{}{}
+		if m.burst != nil && len(burst) > 0 && burst[0] {
+			m.burst <- struct{}{}
+			w = m.pool2.Get().(*wrapper)
+		} else {
+			m.limit <- struct{}{}
+			w = m.pool.Get().(*wrapper)
+		}
+	} else {
+		w = m.pool.Get().(*wrapper)
 	}
-	w := m.pool.Get().(*wrapper)
 	w.cleanup.Stop()
 	return w
 }
 
-func (m *instance) Put(mod api.Module) {
+func (m *instance) Put(mod api.Module, burst ...bool) {
 	w := mod.(*wrapper)
-	if w.Module.Memory().Size() > 32<<20 {
+	if w.Module.Memory().Size() > m.memcap {
 		println(`recycled module with memory size`, w.Module.Memory().Size(), `in`, w.Module.Name())
 		// If the module instance has grown too large, don't put it back in the pool.
 		w.Module.Close(context.Background())
-		m.stats.put(&m.Mutex, w.Module.Memory().Size(), 0)
-		if m.limit != nil {
+		m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
+		if m.burst != nil && len(burst) > 0 && burst[0] {
+			m.pool2.Put(m.pool2.Get().(*wrapper))
+			<-m.burst
+		} else if m.limit != nil {
+			m.pool.Put(m.pool.Get().(*wrapper))
 			<-m.limit
 		}
 		return
 	}
 	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
-	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit))
-	m.pool.Put(w)
-	if m.limit != nil {
-		<-m.limit
+	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
+	if m.burst != nil && len(burst) > 0 && burst[0] {
+		m.pool2.Put(w)
+		<-m.burst
+	} else {
+		m.pool.Put(w)
+		if m.limit != nil {
+			<-m.limit
+		}
 	}
 }
 
-func (m *instance) Run(fn func(mod api.Module)) {
-	mod := m.Get()
-	defer m.Put(mod)
+func (m *instance) Run(fn func(mod api.Module), burst ...bool) {
+	mod := m.Get(burst...)
+	defer m.Put(mod, burst...)
 	fn(mod)
 }
 
