@@ -7,6 +7,13 @@ import (
 // Option represents a constructor option.
 type Option func(*instance)
 
+// WithMemoryLimit sets the maximum memory size. Instances will be recycled when they exceed this limit.
+func WithMemoryLimit(n uint32) Option {
+	return func(m *instance) {
+		m.memcap = n
+	}
+}
+
 // WithLimit sets the maximum pool size. Set to 0 for unlimited pool (default)
 func WithLimit(n int) Option {
 	return func(m *instance) {
