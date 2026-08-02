@@ -37,6 +37,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	fn := func() any {
 		w := newWrapper()
 		w.Module, _ = m.next(ctx)
+		w.cleanup = runtime.AddCleanup(w, func(mod api.Module) { mod.Close(context.Background()); m.stats.cleanup(&m.Mutex) }, w.Module)
 		return w
 	}
 	m.pool = &sync.Pool{New: fn}
@@ -112,28 +113,21 @@ func (m *instance) Get(burst ...bool) api.Module {
 	} else {
 		w = m.pool.Get().(*wrapper)
 	}
-	w.cleanup.Stop()
 	return w
 }
 
 func (m *instance) Put(mod api.Module, burst ...bool) {
 	w := mod.(*wrapper)
+	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
 	if w.Module.Memory().Size() > m.memcap {
-		println(`recycled module with memory size`, w.Module.Memory().Size(), `in`, w.Module.Name())
-		// If the module instance has grown too large, don't put it back in the pool.
 		w.Module.Close(context.Background())
-		m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
 		if m.burst != nil && len(burst) > 0 && burst[0] {
-			m.pool2.Put(m.pool2.Get().(*wrapper))
 			<-m.burst
 		} else if m.limit != nil {
-			m.pool.Put(m.pool.Get().(*wrapper))
 			<-m.limit
 		}
 		return
 	}
-	w.cleanup = runtime.AddCleanup(w, func(m api.Module) { m.Close(context.Background()) }, w.Module)
-	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
 	if m.burst != nil && len(burst) > 0 && burst[0] {
 		m.pool2.Put(w)
 		<-m.burst
@@ -186,13 +180,14 @@ func (w *wrapper) ExportedFunction(name string) (fn api.Function) {
 }
 
 type Stats struct {
-	Total   uint64
-	MemSize uint64
-	MemMax  uint32
-	MemMin  uint32
-	Active  uint64
-	ActMin  int
-	ActMax  int
+	Total    uint64
+	MemSize  uint64
+	MemMax   uint32
+	MemMin   uint32
+	Active   uint64
+	ActMin   int
+	ActMax   int
+	Recycled int
 }
 
 func (s *Stats) put(m *sync.Mutex, memSize uint32, active int) {
@@ -214,6 +209,11 @@ func (s *Stats) put(m *sync.Mutex, memSize uint32, active int) {
 		s.ActMin = active
 	}
 }
+func (s *Stats) cleanup(m *sync.Mutex) {
+	m.Lock()
+	defer m.Unlock()
+	s.Recycled++
+}
 
 func (s *Stats) harvest(m *sync.Mutex) (c Stats) {
 	m.Lock()
@@ -226,5 +226,6 @@ func (s *Stats) harvest(m *sync.Mutex) (c Stats) {
 	s.Active = 0
 	s.ActMax = 0
 	s.ActMin = 0
+	s.Recycled = 0
 	return
 }
