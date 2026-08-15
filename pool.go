@@ -32,8 +32,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	if err != nil {
 		return
 	}
-	print(`compiled module with memory size `)
-	println(w.Module.Memory().Size())
+	println(`compiled module with memory size `, w.Module.Memory().Size())
 	fn := func() any {
 		w := newWrapper()
 		w.Module, _ = m.next(ctx)
@@ -150,11 +149,7 @@ func (m *instance) Compiled() wazero.CompiledModule {
 }
 
 func (m *instance) Stats() (s Stats) {
-	return m.stats.harvest(&m.Mutex)
-}
-
-func (m *instance) Size() (s Stats) {
-	return m.stats.harvest(&m.Mutex)
+	return m.stats.harvest(&m.Mutex, len(m.limit))
 }
 
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
@@ -188,6 +183,7 @@ type Stats struct {
 	ActMin   int
 	ActMax   int
 	Recycled int
+	Limit    int
 }
 
 func (s *Stats) put(m *sync.Mutex, memSize uint32, active int) {
@@ -215,10 +211,11 @@ func (s *Stats) cleanup(m *sync.Mutex) {
 	s.Recycled++
 }
 
-func (s *Stats) harvest(m *sync.Mutex) (c Stats) {
+func (s *Stats) harvest(m *sync.Mutex, limit int) (c Stats) {
 	m.Lock()
 	defer m.Unlock()
 	c = *s
+	c.Limit = limit
 	s.Total = 0
 	s.MemSize = 0
 	s.MemMax = 0
