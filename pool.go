@@ -23,6 +23,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 		runtime:  r,
 		memcap:   16 << 20,
 		n:        &atomic.Uint64{},
+		gen:      &atomic.Uint64{},
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -35,6 +36,7 @@ func New(ctx context.Context, r wazero.Runtime, src []byte, opts ...Option) (m *
 	println(`compiled module with memory size `, w.Module.Memory().Size())
 	fn := func() any {
 		w := newWrapper()
+		w.gen = m.gen.Load()
 		w.Module, _ = m.next(ctx)
 		w.cleanup = runtime.AddCleanup(w, func(mod api.Module) { mod.Close(context.Background()); m.stats.cleanup(&m.Mutex) }, w.Module)
 		return w
@@ -77,10 +79,11 @@ var _ Instance = (*instance)(nil)
 type instance struct {
 	sync.Mutex
 
+	burst    chan struct{}
 	compiled wazero.CompiledModule
 	config   wazero.ModuleConfig
+	gen      *atomic.Uint64
 	limit    chan struct{}
-	burst    chan struct{}
 	memcap   uint32
 	n        *atomic.Uint64
 	name     string
@@ -104,13 +107,21 @@ func (m *instance) Get(burst ...bool) api.Module {
 	if m.limit != nil {
 		if m.burst != nil && len(burst) > 0 && burst[0] {
 			m.burst <- struct{}{}
-			w = m.pool2.Get().(*wrapper)
+			w = m.get(m.pool2)
 		} else {
 			m.limit <- struct{}{}
-			w = m.pool.Get().(*wrapper)
+			w = m.get(m.pool)
 		}
 	} else {
-		w = m.pool.Get().(*wrapper)
+		w = m.get(m.pool)
+	}
+	return w
+}
+
+func (m *instance) get(p *sync.Pool) *wrapper {
+	var w *wrapper
+	for w == nil || w.gen < m.gen.Load() {
+		w = p.Get().(*wrapper)
 	}
 	return w
 }
@@ -152,6 +163,10 @@ func (m *instance) Stats() (s Stats) {
 	return m.stats.harvest(&m.Mutex, len(m.limit))
 }
 
+func (m *instance) Reset() {
+	m.gen.Add(1)
+}
+
 // Module instances can't be garbage collected directly. This wrapper type has no external references so it can be
 // garbage collected. The wrapper also caches exported function references automatically to reduce call latency.
 type wrapper struct {
@@ -159,6 +174,7 @@ type wrapper struct {
 
 	cache   map[string]api.Function
 	cleanup runtime.Cleanup
+	gen     uint64
 }
 
 func newWrapper() *wrapper {
