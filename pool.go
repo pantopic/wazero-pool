@@ -103,19 +103,14 @@ func (m *instance) next(ctx context.Context) (api.Module, error) {
 }
 
 func (m *instance) Get(burst ...bool) api.Module {
-	var w *wrapper
-	if m.limit != nil {
-		if m.burst != nil && len(burst) > 0 && burst[0] {
-			m.burst <- struct{}{}
-			w = m.get(m.pool2)
-		} else {
-			m.limit <- struct{}{}
-			w = m.get(m.pool)
-		}
-	} else {
-		w = m.get(m.pool)
+	if m.burst != nil && len(burst) > 0 && burst[0] {
+		m.burst <- struct{}{}
+		return m.get(m.pool2)
 	}
-	return w
+	if m.limit != nil {
+		m.limit <- struct{}{}
+	}
+	return m.get(m.pool)
 }
 
 func (m *instance) get(p *sync.Pool) *wrapper {
@@ -127,26 +122,21 @@ func (m *instance) get(p *sync.Pool) *wrapper {
 }
 
 func (m *instance) Put(mod api.Module, burst ...bool) {
+	isBurst := m.burst != nil && len(burst) > 0 && burst[0]
 	w := mod.(*wrapper)
-	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
 	if w.Module.Memory().Size() > m.memcap {
 		w.Module.Close(context.Background())
-		if m.burst != nil && len(burst) > 0 && burst[0] {
-			<-m.burst
-		} else if m.limit != nil {
-			<-m.limit
-		}
-		return
-	}
-	if m.burst != nil && len(burst) > 0 && burst[0] {
+	} else if isBurst {
 		m.pool2.Put(w)
-		<-m.burst
 	} else {
 		m.pool.Put(w)
-		if m.limit != nil {
-			<-m.limit
-		}
 	}
+	if isBurst {
+		<-m.burst
+	} else if m.limit != nil {
+		<-m.limit
+	}
+	m.stats.put(&m.Mutex, w.Module.Memory().Size(), len(m.limit)+len(m.burst))
 }
 
 func (m *instance) Run(fn func(mod api.Module), burst ...bool) {
